@@ -1,0 +1,19 @@
+[package]
+name = "wedding-planner"
+version = "0.1.0"
+edition = "2024"
+description = "A small, local-first wedding planning app: checklists, notes, details and image libraries."
+
+[dependencies]
+eframe = "0.37.0"
+rusqlite = { version = "0.41.1", features = ["bundled"] }
+rfd = "0.18.0"
+directories = "6.0.0"
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"

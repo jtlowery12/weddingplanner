@@ -1,0 +1,93 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --locked
+
+  windows:
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release --locked
+      - name: Package
+        shell: pwsh
+        run: Compress-Archive -Path target/release/wedding-planner.exe -DestinationPath WeddingPlanner-windows.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WeddingPlanner-windows
+          path: WeddingPlanner-windows.zip
+
+  macos:
+    needs: test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+      - name: Build Apple Silicon and Intel
+        run: |
+          cargo build --release --locked --target aarch64-apple-darwin
+          cargo build --release --locked --target x86_64-apple-darwin
+      - name: Combine into one universal binary and package
+        run: |
+          lipo -create -output wedding-planner \
+            target/aarch64-apple-darwin/release/wedding-planner \
+            target/x86_64-apple-darwin/release/wedding-planner
+          chmod +x wedding-planner
+          zip WeddingPlanner-macos.zip wedding-planner
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WeddingPlanner-macos
+          path: WeddingPlanner-macos.zip
+
+  linux:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release --locked
+      - name: Package
+        run: |
+          chmod +x target/release/wedding-planner
+          tar -C target/release -czf WeddingPlanner-linux.tar.gz wedding-planner
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WeddingPlanner-linux
+          path: WeddingPlanner-linux.tar.gz
+
+  # Pushing a tag like v0.1.0 publishes a GitHub Release with all three downloads.
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows, macos, linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
